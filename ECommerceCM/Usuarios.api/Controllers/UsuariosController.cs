@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 using Usuarios.api.Data;
 using Usuarios.api.Models;
 
@@ -11,46 +12,53 @@ namespace Usuarios.API.Controllers
     [ApiController]
     public class UsuariosController : ControllerBase
     {
-
-        /// <summary>
-        /// Variável de contexto do banco de dados
-        /// </summary>
         private readonly AppDbContext _context;
+        private readonly IConfiguration _configuration;
 
-        public UsuariosController(AppDbContext context) // Alteração do nome da variável e do tipo de retorno do método de void para UsuariosController 
+        public UsuariosController(AppDbContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
-        // GET: api/Usuarios
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Usuario>>> GetUsuarios() // Alteração do tipo de retorno do método de void para ActionResult<IEnumerable<Usuario>>
+        // POST: api/Usuarios/login
+        [HttpPost("login")]
+        public async Task<ActionResult> Login([FromBody] LoginRequest loginRequest)
         {
-            return await _context.Usuarios.ToListAsync(); // Alteração do nome da variável
-        }
-
-        // GET: api/Usuarios/{id}
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Usuario>> GetUsuario(int id) // Alteração do tipo de retorno do método de void para ActionResult<Usuario>
-        {
-            var usuario = await _context.Usuarios.FindAsync(id);  // Alteração do nome da variável
+            var usuario = await _context.Usuarios
+                .FirstOrDefaultAsync(u => u.Email == loginRequest.Email && u.Senha == loginRequest.Senha);
 
             if (usuario == null)
             {
-                return NotFound(); // Alteração do nome da variável
+                return Unauthorized("Email ou senha inválidos");
             }
 
-            return usuario; // Alteração do nome da variável
-        }
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new System.Security.Claims.ClaimsIdentity(new[]
+                {
+                    new System.Security.Claims.Claim("id", usuario.Id.ToString()),
+                    new System.Security.Claims.Claim("email", usuario.Email),
+                    new System.Security.Claims.Claim("role", usuario.Role)
+                }),
+                Expires = DateTime.UtcNow.AddHours(1),
+                Issuer = _configuration["Jwt:Issuer"],
+                Audience = _configuration["Jwt:Audience"],
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
 
-        // POST: api/Usuarios
-        [HttpPost]
-        public async Task<ActionResult<Usuario>> PostUsuario(Usuario usuario) //Alteração do tipo de retorno do método de void para ActionResult<Usuario>
-        {
-            _context.Usuarios.Add(usuario); // Alteração do nome da variável
-            await _context.SaveChangesAsync(); // Alteração do nome da variável
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            var tokenString = tokenHandler.WriteToken(token);
 
-            return CreatedAtAction(nameof(GetUsuario), new { id = usuario.Id }, usuario); // Alteração do nome da variável
+            return Ok(new { Token = tokenString });
         }
+    }
+
+    public class LoginRequest // Classe para receber os dados de login
+    {
+        public string Email { get; set; }
+        public string Senha { get; set; }
     }
 }
