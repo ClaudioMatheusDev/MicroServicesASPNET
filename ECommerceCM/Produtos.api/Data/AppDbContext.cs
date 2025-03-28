@@ -9,5 +9,7 @@ namespace Produtos.api.Data
                                                                                        //  e passa para a classe base (DbContext) através do construtor base(options)
 
         public DbSet<Produto> Produtos { get; set; } // Propriedade do tipo DbSet<Produto> que representa a tabela Produtos no banco de dados
+        public DbSet<Categoria> Categorias { get; set; } // Propriedade do tipo DbSet<Categoria> que representa a tabela Categorias no banco de dados
+
     }
 }
